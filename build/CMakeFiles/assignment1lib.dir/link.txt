@@ -1,0 +1,2 @@
+/usr/bin/ar qc libassignment1lib.a CMakeFiles/assignment1lib.dir/shell.cpp.o
+/usr/bin/ranlib libassignment1lib.a
