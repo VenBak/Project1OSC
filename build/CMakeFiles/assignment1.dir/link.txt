@@ -1,1 +1,0 @@
-/usr/bin/clang++  -Wall -g -arch arm64 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.0.sdk -mmacosx-version-min=14.6 -Wl,-search_paths_first -Wl,-headerpad_max_install_names CMakeFiles/assignment1.dir/main.cpp.o -o assignment1  libassignment1lib.a
