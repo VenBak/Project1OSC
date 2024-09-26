@@ -166,13 +166,18 @@ int execute_expression(Expression& expression) {
 int step1(bool showPrompt) {
   // create communication channel shared between the two processes
   // ...
+  int fd[2];
+  pipe(fd);
 
   pid_t child1 = fork();
   if (child1 == 0) {
     // redirect standard output (STDOUT_FILENO) to the input of the shared communication channel
     // free non used resources (why?)
+    close(fd[0]);
+    dup2(fd[1], STDOUT_FILENO);
     Command cmd = {{string("date")}};
     execute_command(cmd);
+    close(fd[1]);
     // display nice warning that the executable could not be found
     abort(); // if the executable is not found, we should abort. (why?)
   }
@@ -181,12 +186,17 @@ int step1(bool showPrompt) {
   if (child2 == 0) {
     // redirect the output of the shared communication channel to the standard input (STDIN_FILENO).
     // free non used resources (why?)
+    close(fd[1]);
+    dup2(fd[0], STDIN_FILENO);
     Command cmd = {{string("tail"), string("-c"), string("5")}};
     execute_command(cmd);
+    close(fd[0]);
     abort(); // if the executable is not found, we should abort. (why?)
   }
 
   // free non used resources (why?)
+  close(fd[0]);
+  close(fd[1]);
   // wait on child processes to finish (why both?)
   waitpid(child1, nullptr, 0);
   waitpid(child2, nullptr, 0);
