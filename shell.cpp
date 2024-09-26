@@ -151,6 +151,11 @@ int execute_expression(Expression& expression) {
     return EINVAL;
 
   // Handle intern commands (like 'cd' and 'exit')
+  if (expression.commands[0].parts[0] == "cd")
+    chdir(expression.commands[0].parts[1].c_str());
+
+  if (expression.commands[0].parts[0] == "exit") 
+    exit(0);
   
   // External commands, executed with fork():
   // Loop over all commandos, and connect the output and input of the forked processes
