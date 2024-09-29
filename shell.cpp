@@ -154,6 +154,29 @@ int external_command(Expression& expression) {
   int const SIZE = (int)expression.commands.size();
   pid_t child_id[SIZE];
 
+  bool is_background = expression.background;
+
+  if (!expression.inputFromFile.empty()) {
+    int input_fd = open(expression.inputFromFile.c_str(), O_RDONLY); // Open for reading only
+    if (input_fd == -1) {
+      perror("Failed to open input file");
+      return -1;
+    }
+    dup2(input_fd, STDIN_FILENO);
+    close(input_fd);
+  }
+  
+  // Handle output redirection to file
+  bool output_redirect = !expression.outputToFile.empty();
+  int output_fd = -1;
+  if (output_redirect) {
+    output_fd = open(expression.outputToFile.c_str(), O_WRONLY); // Open for writing only
+    if (output_fd == -1) {
+      perror("Failed to open output file");
+      return -1;
+    }
+  }
+
   // Two possibilities exist: SIZE=1 or SIZE>1. Let's consider what if SIZE=1
   if(SIZE == 1){
     child_id[0] = fork();
@@ -198,6 +221,11 @@ int external_command(Expression& expression) {
           close(cfd[1]);
         }
 
+        else if (output_redirect) {
+          dup2(output_fd, STDOUT_FILENO);
+          close(output_fd);
+        }
+
         execute_command(cmd);
         exit(0);
       }
@@ -218,6 +246,10 @@ int external_command(Expression& expression) {
   // Parent process waits for all child processes to finish
   for (int j = 0; j < SIZE; j++) {
     waitpid(child_id[j], nullptr, 0);
+  }
+  
+  if (output_redirect) {
+    close(output_fd);
   }
 
   return 0;
