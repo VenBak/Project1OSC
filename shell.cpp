@@ -156,18 +156,17 @@ int external_command(Expression& expression) {
 
   bool is_background = expression.background;
 
+  int input_fd = NULL;
   if (!expression.inputFromFile.empty()) {
     int input_fd = open(expression.inputFromFile.c_str(), O_RDONLY); // Open for reading only
     if (input_fd == -1) {
       perror("Failed to open input file");
       return -1;
     }
-    dup2(input_fd, STDIN_FILENO);
-    close(input_fd);
   }
   
   // Handle output redirection to file
-  bool output_redirect = !expression.outputToFile.empty();
+  /*bool output_redirect = !expression.outputToFile.empty();
   int output_fd = -1;
   if (output_redirect) {
     output_fd = open(expression.outputToFile.c_str(), O_WRONLY); // Open for writing only
@@ -175,20 +174,30 @@ int external_command(Expression& expression) {
       perror("Failed to open output file");
       return -1;
     }
-  }
+  }*/
 
   // Two possibilities exist: SIZE=1 or SIZE>1. Let's consider what if SIZE=1
   if(SIZE == 1){
     child_id[0] = fork();
     if(child_id[0] == 0){
       Command cmd = expression.commands[0];
-      dup2(fd[0], STDIN_FILENO);
+      if(expression.inputFromFile.empty()){
+        dup2(input_fd, STDIN_FILENO);
+      } else {
+        dup2(fd[0], STDIN_FILENO);
+      }     
       execute_command(cmd);
       abort();
     }
     // Close the parent pipe
-    close(fd[0]);
-    close(fd[1]);
+    if(expression.inputFromFile.empty()){
+      close(input_fd);
+      close(fd[1]);
+    }      
+    else {
+      close(fd[0]);
+      close(fd[1]);
+    }
   }
   // Now consider the possibility that SIZE>1
   else {
@@ -208,7 +217,17 @@ int external_command(Expression& expression) {
       if (child_id[j] == 0) {
         Command cmd = expression.commands[j]; 
 
-        if (j > 0) {
+        // Handling first command separately
+        if (j == 0) {
+          if(!expression.inputFromFile.empty()){
+            dup2(input_fd, STDIN_FILENO);
+            close(input_fd);
+          } else {
+            dup2(prev_fd, STDIN_FILENO);
+            close(prev_fd);
+          }     
+        }
+        if (j > 1) {
           // Redirect input
           dup2(prev_fd, STDIN_FILENO);
           close(prev_fd);
@@ -221,10 +240,10 @@ int external_command(Expression& expression) {
           close(cfd[1]);
         }
 
-        else if (output_redirect) {
+        /*else if (output_redirect) {
           dup2(output_fd, STDOUT_FILENO);
           close(output_fd);
-        }
+        }*/
 
         execute_command(cmd);
         exit(0);
@@ -232,8 +251,10 @@ int external_command(Expression& expression) {
 
       // Close the parent pipe
       // First the read end of the previous pipe
-      if (j > 0) 
+      if (j > 0 && expression.inputFromFile.empty()) 
         close(prev_fd);
+      if (j == 0 && !expression.inputFromFile.empty())
+        close(input_fd);
       // Second the write end of the next pipe
       // ALSO: update 'prev_fd' to the current pipe's read end
       if (j < SIZE - 1) {
@@ -248,9 +269,9 @@ int external_command(Expression& expression) {
     waitpid(child_id[j], nullptr, 0);
   }
   
-  if (output_redirect) {
+  /*if (output_redirect) {
     close(output_fd);
-  }
+  }*/
 
   return 0;
 }
