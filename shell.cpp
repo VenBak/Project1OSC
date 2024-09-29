@@ -150,12 +150,9 @@ int external_command(Expression& expression) {
   int fd[2];
   pipe(fd);
 
-  // Variable 'child_id[SIZE]' is an array of process ids of the child processes
-  int const SIZE = (int)expression.commands.size();
-  pid_t child_id[SIZE];
-
-  bool is_background = expression.background;
-
+  // Variable 'prev_fd' saves the read end of the previous pipe
+  int prev_fd = fd[0];
+  // Create a filedescriptor for input from 'expression.inputFromFile'
   int input_fd = NULL;
   if (!expression.inputFromFile.empty()) {
     int input_fd = open(expression.inputFromFile.c_str(), O_RDONLY); // Open for reading only
@@ -163,8 +160,9 @@ int external_command(Expression& expression) {
       perror("Failed to open input file");
       return -1;
     }
+    // Update 'prev_fd'
+    prev_fd = input_fd;
   }
-  
   // Handle output redirection to file
   /*bool output_redirect = !expression.outputToFile.empty();
   int output_fd = -1;
@@ -175,94 +173,57 @@ int external_command(Expression& expression) {
       return -1;
     }
   }*/
-
-  // Two possibilities exist: SIZE=1 or SIZE>1. Let's consider what if SIZE=1
-  if(SIZE == 1){
-    child_id[0] = fork();
-    if(child_id[0] == 0){
-      Command cmd = expression.commands[0];
-      if(expression.inputFromFile.empty()){
-        dup2(input_fd, STDIN_FILENO);
-      } else {
-        dup2(fd[0], STDIN_FILENO);
-      }     
-      execute_command(cmd);
-      abort();
+  // bool is_background = expression.background;
+  // Variable 'child_id[SIZE]' is an array of process ids of the child processes
+  int const SIZE = (int)expression.commands.size();
+  pid_t child_id[SIZE];
+  /* A loop goes over all commands. Each iteration creates a new process. 
+  Each iteration is responsible for the execution of one command*/
+  for (int j = 0; j < SIZE; j++) {
+    // Create a pipe for the current command - exc. the last one
+    int cfd[2];
+    if (j < SIZE - 1) {
+      pipe(cfd);
     }
-    // Close the parent pipe
-    if(expression.inputFromFile.empty()){
-      close(input_fd);
-      close(fd[1]);
-    }      
-    else {
-      close(fd[0]);
-      close(fd[1]);
-    }
-  }
-  // Now consider the possibility that SIZE>1
-  else {
-    // Variable 'prev_fd' saves the read end of the previous pipe
-    int prev_fd = fd[0];  
 
-    /* A loop goes over all commands. Each iteration creates a new process. 
-    Each iteration is responsible for the execution of one command*/
-    for (int j = 0; j < SIZE; j++) {
-      // Create a pipe for the current command - exc. the last one
-      int cfd[2];
-      if (j < SIZE - 1) {
-        pipe(cfd);
-      }
+    child_id[j] = fork();
+    if (child_id[j] == 0) {
+      Command cmd = expression.commands[j]; 
 
-      child_id[j] = fork();
-      if (child_id[j] == 0) {
-        Command cmd = expression.commands[j]; 
-
-        // Handling first command separately
-        if (j == 0) {
-          if(!expression.inputFromFile.empty()){
-            dup2(input_fd, STDIN_FILENO);
-            close(input_fd);
-          } else {
-            dup2(prev_fd, STDIN_FILENO);
-            close(prev_fd);
-          }     
-        }
-        if (j > 1) {
-          // Redirect input
-          dup2(prev_fd, STDIN_FILENO);
-          close(prev_fd);
-        }
-
-        if (j < SIZE - 1) {
-          // Redirect output
-          close(cfd[0]);
-          dup2(cfd[1], STDOUT_FILENO);
-          close(cfd[1]);
-        }
-
-        /*else if (output_redirect) {
-          dup2(output_fd, STDOUT_FILENO);
-          close(output_fd);
-        }*/
-
-        execute_command(cmd);
-        exit(0);
-      }
-
-      // Close the parent pipe
-      // First the read end of the previous pipe
-      if (j > 0 && expression.inputFromFile.empty()) 
+      if (j > 0) {
+        // Redirect input
+        dup2(prev_fd, STDIN_FILENO);
         close(prev_fd);
-      if (j == 0 && !expression.inputFromFile.empty())
-        close(input_fd);
-      // Second the write end of the next pipe
-      // ALSO: update 'prev_fd' to the current pipe's read end
-      if (j < SIZE - 1) {
-        close(cfd[1]); 
-        prev_fd = cfd[0];
       }
+
+      if (j < SIZE - 1) {
+        // Redirect output
+        close(cfd[0]);
+        dup2(cfd[1], STDOUT_FILENO);
+        close(cfd[1]);
+      }
+
+      /*else if (output_redirect) {
+        dup2(output_fd, STDOUT_FILENO);
+        close(output_fd);
+      }*/
+
+      execute_command(cmd);
+      exit(0);
+    }
+
+    // Close the parent pipe
+    // First the read end of the previous pipe
+    if (j > 0) 
+      close(prev_fd);
+    // Second the write end of the next pipe
+    // ALSO: update 'prev_fd' to the current pipe's read end
+    if (j < SIZE - 1) {
+      close(cfd[1]); 
+      prev_fd = cfd[0];
     }
   }
+
 
   // Parent process waits for all child processes to finish
   for (int j = 0; j < SIZE; j++) {
