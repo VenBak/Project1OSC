@@ -150,19 +150,6 @@ int external_command(Expression& expression) {
   int fd[2];
   pipe(fd);
 
-  // Variable 'prev_fd' saves the read end of the previous pipe
-  int prev_fd = fd[0];
-  // Create a filedescriptor for input from 'expression.inputFromFile'
-  int input_fd = NULL;
-  if (!expression.inputFromFile.empty()) {
-    int input_fd = open(expression.inputFromFile.c_str(), O_RDONLY); // Open for reading only
-    if (input_fd == -1) {
-      perror("Failed to open input file");
-      return -1;
-    }
-    // Update 'prev_fd'
-    prev_fd = input_fd;
-  }
   // Handle output redirection to file
   /*bool output_redirect = !expression.outputToFile.empty();
   int output_fd = -1;
@@ -174,9 +161,12 @@ int external_command(Expression& expression) {
     }
   }*/
   // bool is_background = expression.background;
+  
   // Variable 'child_id[SIZE]' is an array of process ids of the child processes
   int const SIZE = (int)expression.commands.size();
   pid_t child_id[SIZE];
+  // Variable 'prev_fd' saves the read end of the previous pipe
+  int prev_fd = fd[0];
   /* A loop goes over all commands. Each iteration creates a new process. 
   Each iteration is responsible for the execution of one command*/
   for (int j = 0; j < SIZE; j++) {
@@ -190,6 +180,17 @@ int external_command(Expression& expression) {
     if (child_id[j] == 0) {
       Command cmd = expression.commands[j]; 
 
+      if (j == 0) {
+        if(!expression.inputFromFile.empty()){
+          prev_fd = open(expression.inputFromFile.c_str(), O_RDONLY);
+          dup2(prev_fd, STDIN_FILENO);
+          close(prev_fd);
+        } else {
+          dup2(prev_fd, STDIN_FILENO);
+          close(prev_fd);
+        }
+      }
+
       if (j > 0) {
         // Redirect input
         dup2(prev_fd, STDIN_FILENO);
@@ -199,6 +200,11 @@ int external_command(Expression& expression) {
       if (j < SIZE - 1) {
         // Redirect output
         close(cfd[0]);
+        if(!expression.outputToFile.empty()){
+          prev_fd = open(expression.outputToFile.c_str(), O_WRONLY); 
+          dup2(cfd[1], STDOUT_FILENO);
+          close(cfd[1]);
+        }
         dup2(cfd[1], STDOUT_FILENO);
         close(cfd[1]);
       }
