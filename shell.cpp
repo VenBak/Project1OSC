@@ -154,7 +154,7 @@ int external_command(Expression& expression) {
   /*bool output_redirect = !expression.outputToFile.empty();
   int output_fd = -1;
   if (output_redirect) {
-    output_fd = open(expression.outputToFile.c_str(), O_WRONLY); // Open for writing only
+    output_fd = open(expression.outputToFile.c_str(), O_WRONLY | O_CREAT); // Open for writing only
     if (output_fd == -1) {
       perror("Failed to open output file");
       return -1;
@@ -200,20 +200,20 @@ int external_command(Expression& expression) {
       if (j < SIZE - 1) {
         // Redirect output
         close(cfd[0]);
-        if(!expression.outputToFile.empty()){
-          prev_fd = open(expression.outputToFile.c_str(), O_WRONLY); 
-          dup2(cfd[1], STDOUT_FILENO);
-          close(cfd[1]);
-        }
         dup2(cfd[1], STDOUT_FILENO);
         close(cfd[1]);
       }
 
-      /*else if (output_redirect) {
+      if(j == SIZE - 1 && !expression.outputToFile.empty()) {
+        int output_fd = open(expression.outputToFile.c_str(), O_WRONLY | O_CREAT, 0666); // Open for writing only
+        if (output_fd == -1) {
+          perror("Failed to open output file");
+          return -1;
+        }
         dup2(output_fd, STDOUT_FILENO);
         close(output_fd);
-      }*/
-
+      }
+      
       execute_command(cmd);
       exit(0);
     }
@@ -256,53 +256,8 @@ int execute_expression(Expression& expression) {
     exit(0);
   
   // External commands, executed with fork():
+  external_command(expression);
   // Loop over all commandos, and connect the output and input of the forked processes
-
-  // For now, we just execute the first command in the expression. Disable.
-  execute_command(expression.commands[0]);
-
-  return 0;
-}
-
-// framework for executing "date | tail -c 5" using raw commands
-// two processes are created, and connected to each other
-int step1(bool showPrompt) {
-  // create communication channel shared between the two processes
-  // ...
-  int fd[2];
-  pipe(fd);
-
-  pid_t child1 = fork();
-  if (child1 == 0) {
-    // redirect standard output (STDOUT_FILENO) to the input of the shared communication channel
-    // free non used resources (why?)
-    close(fd[0]);
-    dup2(fd[1], STDOUT_FILENO);
-    Command cmd = {{string("date")}};
-    execute_command(cmd);
-    close(fd[1]);
-    // display nice warning that the executable could not be found
-    abort(); // if the executable is not found, we should abort. (why?)
-  }
-
-  pid_t child2 = fork();
-  if (child2 == 0) {
-    // redirect the output of the shared communication channel to the standard input (STDIN_FILENO).
-    // free non used resources (why?)
-    close(fd[1]);
-    dup2(fd[0], STDIN_FILENO);
-    Command cmd = {{string("tail"), string("-c"), string("5")}};
-    execute_command(cmd);
-    close(fd[0]);
-    abort(); // if the executable is not found, we should abort. (why?)
-  }
-
-  // free non used resources (why?)
-  close(fd[0]);
-  close(fd[1]);
-  // wait on child processes to finish (why both?)
-  waitpid(child1, nullptr, 0);
-  waitpid(child2, nullptr, 0);
   return 0;
 }
 
