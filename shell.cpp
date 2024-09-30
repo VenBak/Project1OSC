@@ -200,6 +200,11 @@ int external_command(Expression& expression) {
       if (j < SIZE - 1) {
         // Redirect output
         close(cfd[0]);
+        if(!expression.outputToFile.empty()){
+          int output_fd = open(expression.outputToFile.c_str(), O_WRONLY); 
+          dup2(output_fd, STDOUT_FILENO);
+          close(output_fd);
+        }
         dup2(cfd[1], STDOUT_FILENO);
         close(cfd[1]);
       }
@@ -232,8 +237,10 @@ int external_command(Expression& expression) {
 
 
   // Parent process waits for all child processes to finish
-  for (int j = 0; j < SIZE; j++) {
-    waitpid(child_id[j], nullptr, 0);
+  if (!expression.background) {
+    for (int j = 0; j < SIZE; j++) {
+      waitpid(child_id[j], nullptr, 0);
+    }
   }
   
   /*if (output_redirect) {
