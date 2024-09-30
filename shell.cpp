@@ -5,8 +5,8 @@
 	* v22.09.05
 
 	Student names:
-	- ...
-	- ...
+	- Boldizsár Dénes- s1103128
+	- André Brahin- s1116695
 */
 
 /**
@@ -148,7 +148,10 @@ Expression parse_command_line(string commandLine) {
 int external_command(Expression& expression) {
   // Initial pipe for first parent and its child
   int fd[2];
-  pipe(fd);
+  if (pipe(fd) == -1) {
+    printf("An error happened when creating the pipe\n");
+    return 1;
+  }
  
   // Variable 'child_id[SIZE]' is an array of process ids of the child processes
   int const SIZE = (int)expression.commands.size();
@@ -162,6 +165,10 @@ int external_command(Expression& expression) {
     int cfd[2];
     if (j < SIZE - 1) {
       pipe(cfd);
+      if(pipe(cfd) == -1) {
+        printf("An error happened when creating the pipe\n");
+        return 1;
+      }
     }
 
     child_id[j] = fork();
@@ -171,6 +178,10 @@ int external_command(Expression& expression) {
       if (j == 0) {
         if(!expression.inputFromFile.empty()){
           prev_fd = open(expression.inputFromFile.c_str(), O_RDONLY);
+          if (prev_fd == -1) {
+            perror("Failed to open input file");
+            return -1;
+          }
           dup2(prev_fd, STDIN_FILENO);
           close(prev_fd);
         } else {
