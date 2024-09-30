@@ -243,13 +243,13 @@ int execute_expression(Expression& expression) {
   // External commands, executed with fork():
   if(expression.background){
     pid_t child = fork();
-    if(child == fork()){
+    if(child == 0){
       external_command(expression);
-      exit(0);
+      return 0;
     } else {
       return 0;
     }
-  } else{
+  } else {
     external_command(expression);
     return 0;
   }
