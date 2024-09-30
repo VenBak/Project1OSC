@@ -154,12 +154,53 @@ int external_command(Expression& expression) {
   int const SIZE = (int)expression.commands.size();
   pid_t child_id[SIZE];
 
+<<<<<<< Updated upstream
   // Two possibilities exist: SIZE=1 or SIZE>1. Let's consider what if SIZE=1
   if(SIZE == 1){
     child_id[0] = fork();
     if(child_id[0] == 0){
       Command cmd = expression.commands[0];
       dup2(fd[0], STDIN_FILENO);
+=======
+    child_id[j] = fork();
+    if (child_id[j] == 0) {
+      Command cmd = expression.commands[j]; 
+
+      if (j == 0) {
+        if(!expression.inputFromFile.empty()){
+          prev_fd = open(expression.inputFromFile.c_str(), O_RDONLY);
+          dup2(prev_fd, STDIN_FILENO);
+          close(prev_fd);
+        } else {
+          dup2(prev_fd, STDIN_FILENO);
+          close(prev_fd);
+        }
+      }
+
+      if (j > 0) {
+        // Redirect input
+        dup2(prev_fd, STDIN_FILENO);
+        close(prev_fd);
+      }
+
+      if (j < SIZE - 1) {
+        // Redirect output
+        close(cfd[0]);
+        dup2(cfd[1], STDOUT_FILENO);
+        close(cfd[1]);
+      }
+
+      if(j == SIZE - 1 && !expression.outputToFile.empty()) {
+        int output_fd = open(expression.outputToFile.c_str(), O_WRONLY | O_CREAT, 0666); // Open for writing only
+        if (output_fd == -1) {
+          perror("Failed to open output file");
+          return -1;
+        }
+        dup2(output_fd, STDOUT_FILENO);
+        close(output_fd);
+      }
+
+>>>>>>> Stashed changes
       execute_command(cmd);
       abort();
     }
@@ -236,6 +277,21 @@ int execute_expression(Expression& expression) {
     exit(0);
   
   // External commands, executed with fork():
+<<<<<<< Updated upstream
+=======
+  if(expression.background){
+    pid_t child = fork();
+    if(child == 0){
+      external_command(expression);
+      return 0;
+    } else {
+      return 0;
+    }
+  } else {
+      external_command(expression);
+      return 0;
+  } 
+>>>>>>> Stashed changes
   // Loop over all commandos, and connect the output and input of the forked processes
 
   // For now, we just execute the first command in the expression. Disable.
@@ -292,6 +348,9 @@ int shell(bool showPrompt) {
     string commandLine = request_command_line(showPrompt);
     Expression expression = parse_command_line(commandLine);
     int rc = execute_expression(expression);
+    /*if (expression.background && expression.inputFromFile.empty()){
+      cerr << "Invalid input" << endl;
+    }*/
     if (rc != 0)
       cerr << strerror(rc) << endl;
   }
